@@ -140,10 +140,17 @@ Module.register("MMM-Teslamate", {
 
     this.debugLog(this.name + ": Subscriptions initialized");
     this.openMqttConnection();
+  },
 
-    // Renders now happen only when data changes, so refresh once a minute to
-    // keep time-relative text (e.g. "Charge Starting" countdown) current.
-    setInterval(() => this.triggerDomUpdate(), 60 * 1000);
+  // Renders only happen when data changes, but the "Charge Starting" countdown
+  // is computed from the current time, so refresh once a minute while it's shown.
+  setCountdownTimer: function (shown) {
+    if (shown && !this.countdownTimer) {
+      this.countdownTimer = setInterval(() => this.triggerDomUpdate(), 60 * 1000);
+    } else if (!shown && this.countdownTimer) {
+      clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
+    }
   },
 
   openMqttConnection: function () {
@@ -230,6 +237,7 @@ Module.register("MMM-Teslamate", {
     const timeToFull = this.subscriptions["charge_time"].value;
     const pluggedIn = this.subscriptions["plugged_in"].value;
     const charging = pluggedIn && timeToFull > 0.0;
+    const showChargeStart = !charging && pluggedIn && chargeStart && chargeStart !== "";
     const energyAdded = this.subscriptions["charge_added"].value;
     const locked = this.subscriptions["locked"].value;
     const sentry = this.subscriptions["sentry"].value;
@@ -290,7 +298,8 @@ Module.register("MMM-Teslamate", {
       idealRange, estRange, speed, outside_temp, inside_temp, odometer,
       windowsOpen, batteryUsable, isClimateOn, isHealthy, charging,
       doorsOpen, trunkOpen, frunkOpen, isUserPresent, isUpdateAvailable,
-      isPreconditioning, geofence, tpms_pressure_fl, tpms_pressure_fr, tpms_pressure_rl, tpms_pressure_rr
+      isPreconditioning, geofence, tpms_pressure_fl, tpms_pressure_fr, tpms_pressure_rl, tpms_pressure_rr,
+      showChargeStart
     }
 
     this.debugLog(this.name + ": Generating DOM with data: ", data);
@@ -300,6 +309,8 @@ Module.register("MMM-Teslamate", {
     //optionally append the table
     if (this.config.hybridView)
       this.generateTableDom(wrapper, data);
+
+    this.setCountdownTimer(this.config.hybridView && showChargeStart);
 
     return wrapper;
   },
@@ -313,7 +324,8 @@ Module.register("MMM-Teslamate", {
       idealRange, estRange, speed, outside_temp, inside_temp, odometer,
       windowsOpen, batteryUsable, isClimateOn, isHealthy, charging,
       doorsOpen, trunkOpen, frunkOpen, isUserPresent, isUpdateAvailable,
-      isPreconditioning, geofence, tpms_pressure_fl, tpms_pressure_fr, tpms_pressure_rl, tpms_pressure_rr
+      isPreconditioning, geofence, tpms_pressure_fl, tpms_pressure_fr, tpms_pressure_rl, tpms_pressure_rr,
+      showChargeStart
     } = data;
 
     const makeSpan = function (className, content) {
@@ -364,7 +376,7 @@ Module.register("MMM-Teslamate", {
       timeToFullLi.appendChild(makeSpan("value", makeChargeRemString(timeToFull)));
       attrList.appendChild(energyAddedLi);
       attrList.appendChild(timeToFullLi);
-    } else if (pluggedIn && chargeStart && chargeStart !== "") {
+    } else if (showChargeStart) {
       var chargeStartLi = document.createElement("li");
       chargeStartLi.className = "mattribute";
       chargeStartLi.style = lineStyle;
